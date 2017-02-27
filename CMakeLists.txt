@@ -7,6 +7,7 @@ set( CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake )
 find_package( LibCvmfsCache REQUIRED )
 find_package( Hdfs REQUIRED )
 find_package( Jvm REQUIRED )
+find_package( OpenSSL REQUIRED )
 
 if( CMAKE_COMPILER_IS_GNUCXX )
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror" )
@@ -25,7 +26,10 @@ add_definitions(-std=c++11)
 include_directories("${PROJECT_SOURCE_DIR}" "${CVMFS_CACHE_INCLUDES}" "${HDFS_INCLUDES}" "${JVM_INCLUDES}" "${JVM_MD_INCLUDES}")
 
 add_executable(cvmfs_cache_hdfs src/cvmfs_cache_hdfs.cc)
-target_link_libraries(cvmfs_cache_hdfs ${CVMFS_CACHE_LIB})
+target_link_libraries(cvmfs_cache_hdfs "${CVMFS_CACHE_LIB}" "${HDFS_LIB}")
+
+# These shared libraries are needed for libcvmfs_cache.a.  TODO: move this to macro file.
+target_link_libraries(cvmfs_cache_hdfs pthread "${OPENSSL_LIBRARIES}")
 
 install(
   PROGRAMS cvmfs_cache_hdfs
