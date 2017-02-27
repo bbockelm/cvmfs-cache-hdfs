@@ -1,6 +1,11 @@
 
+#include <map>
 #include <string>
+#include <sstream>
+#include <cstdint>
+#include <cinttypes>
 
+#include <unistd.h>
 #include <errno.h>
 #include <assert.h>
 #include <string.h>
@@ -13,23 +18,24 @@ struct cvmcache_context *ctx;
 std::string g_hdfs_base;
 hdfsFS g_fs = nullptr;
 
-class TxnTransient {
-  TxnTransient() { memset(&id, 0, sizeof(id)); }
-  explicit TxnTransient(const struct cvmcache_hash &hash, hdfsFile fp) : id_(hash), fp_(fp) { }
+struct TxnTransient {
+  TxnTransient() : size_(0), fp_(NULL) { memset(&id_, 0, sizeof(id_)); }
+  explicit TxnTransient(const struct cvmcache_hash &hash, hdfsFile fp) : size_(0), id_(hash), fp_(fp) { }
 
+  uint64_t size_;
   struct cvmcache_hash id_;
   hdfsFile fp_;
 };
 
-map<uint64_t, TxnTransient> transactions;
+std::map<uint64_t, TxnTransient> transactions;
 
-static std::string hdfs_file_name(const struct cvmcache_hash *id)
+static std::string hdfs_file_name(const struct cvmcache_hash &id)
 {
   std::stringstream ss;
-  char[sizeof(id->digest) + 2] tmp_path;
-  memcpy(tmp_path, id->digest, 2);
+  char tmp_path[sizeof(id.digest) + 2];
+  memcpy(tmp_path, id.digest, 2);
   tmp_path[2] = '/';
-  memcpy(tmp_path+3, id->digest+2, sizeof(id->digest)-2);
+  memcpy(tmp_path+3, id.digest+2, sizeof(id.digest)-2);
   tmp_path[sizeof(tmp_path)-1] = '\0';
   ss << g_hdfs_base << "/" << tmp_path;
   return ss.str();
@@ -40,7 +46,7 @@ static int hdfs_pread(struct cvmcache_hash *id,
                     uint32_t *size,
                     unsigned char *buffer)
 {
-  std::string fname = hdfs_file_name(id);
+  std::string fname = hdfs_file_name(*id);
   hdfsFile fp = hdfsOpenFile(g_fs, fname.c_str(), O_RDONLY, 0, 0, 0);
   if (fp == nullptr)
   {
@@ -61,9 +67,7 @@ static int hdfs_start_txn(struct cvmcache_hash *id,
                         uint64_t txn_id,
                         struct cvmcache_object_info *info)
 {
-  TxnTransient txn(*id);
-
-  std::string fname = hdfs_file_name(id)
+  std::string fname = hdfs_file_name(*id);
   std::string new_fname = fname + ".inprogress";
 
   hdfsFile fp = hdfsOpenFile(g_fs, fname.c_str(), O_RDONLY, 0, 0, 0);
@@ -72,8 +76,9 @@ static int hdfs_start_txn(struct cvmcache_hash *id,
     hdfsCloseFile(g_fs, fp);
     return CVMCACHE_STATUS_OK;
   }
-  hdfsFile fp = hdfsOpenFile(g_fs, fname.c_str(), O_WRONLY, 0, 1, 0);
+  fp = hdfsOpenFile(g_fs, fname.c_str(), O_WRONLY, 0, 1, 0);
 
+  TxnTransient txn(*id, fp);
   transactions[txn_id] = txn;
   return CVMCACHE_STATUS_OK;
 }
@@ -85,38 +90,38 @@ static int hdfs_write_txn(uint64_t txn_id,
 {
   TxnTransient &txn = transactions[txn_id];
 
-  tSize nbytes = hdfsWrite(g_fs, txn.fp, buffer, size);
+  tSize nbytes = hdfsWrite(g_fs, txn.fp_, buffer, size);
   if (nbytes == -1)
   {
     return CVMCACHE_STATUS_IOERR;
   }
 
-  txn.size += size;
+  txn.size_ += size;
   return CVMCACHE_STATUS_OK;
 }
 
 
 static int hdfs_commit_txn(uint64_t txn_id) {
   TxnTransient &txn(transactions[txn_id]);
-  printf("commit txn ID %" PRIu64 ", size %" PRIu64 "\n", txn_id, txn.size);
+  printf("commit txn ID %" PRIu64 ", size %" PRIu64 "\n", txn_id, txn.size_);
 
-  if (hdfsHFlush(g_fs, txn.file) == -1)
+  if (hdfsHFlush(g_fs, txn.fp_) == -1)
   {
     fprintf(stderr, "Commit txn ID %" PRIu64 " failed: %s (errno=%d)\n", txn_id, strerror(errno), errno);
-    hdfsCloseFile(g_fs, txn.file);
+    hdfsCloseFile(g_fs, txn.fp_);
     return CVMCACHE_STATUS_IOERR;
   }
-  if (-1 == hdfsCloseFile(g_fs, txn.file))
+  if (-1 == hdfsCloseFile(g_fs, txn.fp_))
   {
     fprintf(stderr, "Commit txn ID %" PRIu64 " failed: %s (errno=%d)\n", txn_id, strerror(errno), errno);
     return CVMCACHE_STATUS_IOERR;
   }
-  std::string fname = hdfs_file_name(id)
+  std::string fname = hdfs_file_name(txn.id_);
   std::string new_fname = fname + ".inprogress";
 
-  if ((-1 == hdfsRename(g_fs, new_fname, fname)) &&  (-1 == hdfsExists(g_fs, fname)))
+  if ((-1 == hdfsRename(g_fs, new_fname.c_str(), fname.c_str())) &&  (-1 == hdfsExists(g_fs, fname.c_str())))
   {
-    fprintf(stderr, "Commit of txn ID %" PRIu64 ", filename %s failed: %s (errno=%d)\n", txn_id, fname, strerror(errno), errno);
+    fprintf(stderr, "Commit of txn ID %" PRIu64 ", filename %s failed: %s (errno=%d)\n", txn_id, fname.c_str(), strerror(errno), errno);
     return CVMCACHE_STATUS_IOERR;
   }
 
@@ -129,14 +134,14 @@ static int hdfs_abort_txn(uint64_t txn_id) {
 
   TxnTransient &txn = transactions[txn_id];
 
-  if (-1 == hdfsCloseFile(g_fs, txn.file))
+  if (-1 == hdfsCloseFile(g_fs, txn.fp_))
   {
     fprintf(stderr, "Abort txn ID %" PRIu64 " failed: %s (errno=%d)\n", txn_id, strerror(errno), errno);
     transactions.erase(txn_id);
     return CVMCACHE_STATUS_IOERR;
   }
   std::string fname = hdfs_file_name(txn.id_) + ".inprogress";
-  if (-1 == hdfsDelete(g_fs, fname))
+  if (-1 == hdfsDelete(g_fs, fname.c_str(), 0))
   {
     fprintf(stderr, "Delete failed for %s: %s (errno=%d)\n", fname.c_str(), strerror(errno), errno);
     transactions.erase(txn_id);
@@ -190,7 +195,7 @@ int main(int argc, char **argv) {
 
   ctx = cvmcache_init(&callbacks);
   assert(ctx != NULL);
-  part_size = cvmcache_max_object_size(ctx);
+  //int part_size = cvmcache_max_object_size(ctx);
   int retval = cvmcache_listen(ctx, argv[2]);
   assert(retval);
   printf("Listening for cvmfs clients on %s\n", argv[2]);
