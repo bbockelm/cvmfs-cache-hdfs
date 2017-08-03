@@ -49,3 +49,7 @@ install(
   FILES conf/cvmfs_cache_hdfs
   DESTINATION ${SYSCONF_INSTALL_DIR}/sysconfig)
 
+install(
+  FILES conf/osgstorage.org.conf
+  DESTINATION ${SYSCONF_INSTALL_DIR}/cvmfs/domain.d/)
+
