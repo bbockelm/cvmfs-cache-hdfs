@@ -92,6 +92,7 @@ reload_log() {
   g_logfd = fd;
   dup2(g_logfd, 1);
   dup2(g_logfd, 2);
+  log("Logfile successfully reloaded.");
 }
 
 static void
