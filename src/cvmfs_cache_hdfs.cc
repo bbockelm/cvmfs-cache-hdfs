@@ -356,6 +356,9 @@ int main(int argc, char **argv) {
     return 3;
   }
 
+  // Re-install signal handler after Java starts up; Java stole it from us!
+  sigaction(SIGHUP, &sa, NULL);
+
   struct cvmcache_callbacks callbacks;
   memset(&callbacks, 0, sizeof(callbacks));
   callbacks.cvmcache_chrefcnt = hdfs_chrefcnt;
