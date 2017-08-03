@@ -85,7 +85,7 @@ reload_log() {
 
   int fd = open(g_logfname.c_str(), O_APPEND|O_CREAT|O_WRONLY, 0640);
   if (fd == -1) {
-    log("Failed to open new log file descriptor: %s.\n", strerror(errno));
+    log("Failed to open new log file descriptor: %s.", strerror(errno));
     return;
   }
   close(g_logfd);
@@ -111,7 +111,7 @@ log(const char * format, ... ) {
   tp = localtime(&t);
   if (tp) {
     if (strftime(timestamp_buf, TIMESTAMP_BUF_SIZE, "%c", tp)) {
-      printf("[%s]: ", timestamp_buf);
+      printf("[%s](pid:%d): ", timestamp_buf, getpid());
     }
   }
   va_list args;
@@ -141,7 +141,7 @@ static std::string hdfs_file_name(const struct cvmcache_hash &id)
 static int hdfs_obj_info(struct cvmcache_hash *id, struct cvmcache_object_info *info)
 {
   std::string fname = hdfs_file_name(*id);
-  log("Getting object info for %s.\n", fname.c_str());
+  log("Getting object info for %s.", fname.c_str());
 
 
   hdfsFileInfo * hinfo = hdfsGetPathInfo(g_fs, fname.c_str());
@@ -161,7 +161,7 @@ static int hdfs_chrefcnt(struct cvmcache_hash *id, int32_t change_by)
     return CVMCACHE_STATUS_OK;
   }
   std::string fname = hdfs_file_name(*id);
-  log("Changing ref count for %s by %d.\n", fname.c_str(), change_by);
+  log("Changing ref count for %s by %d.", fname.c_str(), change_by);
 
   auto iter = open_files.find(*id);
   if (iter == open_files.end())
@@ -220,7 +220,7 @@ static int hdfs_start_txn(struct cvmcache_hash *id,
                         struct cvmcache_object_info *info)
 {
   std::string fname = hdfs_file_name(*id);
-  log("Starting transaction on cache file %s.\n", fname.c_str());
+  log("Starting transaction on cache file %s.", fname.c_str());
   std::string new_fname = fname + ".inprogress";
 
   hdfsFile fp = hdfsOpenFile(g_fs, fname.c_str(), O_RDONLY, 0, 0, 0);
@@ -232,7 +232,7 @@ static int hdfs_start_txn(struct cvmcache_hash *id,
   fp = hdfsOpenFile(g_fs, new_fname.c_str(), O_WRONLY, 0, 1, 0);
   if (fp == nullptr)
   {
-    log("Failed to open a new cache file (%s) for writing.\n", new_fname.c_str());
+    log("Failed to open a new cache file (%s) for writing.", new_fname.c_str());
     return CVMCACHE_STATUS_IOERR;
   }
 
@@ -248,7 +248,7 @@ static int hdfs_write_txn(uint64_t txn_id,
 {
   TxnTransient &txn = transactions[txn_id];
 
-  log("Writing %" PRIu32 " bytes to txn ID %" PRIu64 "\n", size, txn_id);
+  log("Writing %" PRIu32 " bytes to txn ID %" PRIu64, size, txn_id);
   tSize nbytes = hdfsWrite(g_fs, txn.fp_, buffer, size);
   if (nbytes == -1)
   {
@@ -262,17 +262,17 @@ static int hdfs_write_txn(uint64_t txn_id,
 
 static int hdfs_commit_txn(uint64_t txn_id) {
   TxnTransient &txn(transactions[txn_id]);
-  log("commit txn ID %" PRIu64 ", size %" PRIu64 "\n", txn_id, txn.size_);
+  log("commit txn ID %" PRIu64 ", size %" PRIu64, txn_id, txn.size_);
 
   if (hdfsHFlush(g_fs, txn.fp_) == -1)
   {
-    log("Commit txn ID %" PRIu64 " failed: %s (errno=%d)\n", txn_id, strerror(errno), errno);
+    log("Commit txn ID %" PRIu64 " failed: %s (errno=%d)", txn_id, strerror(errno), errno);
     hdfsCloseFile(g_fs, txn.fp_);
     return CVMCACHE_STATUS_IOERR;
   }
   if (-1 == hdfsCloseFile(g_fs, txn.fp_))
   {
-    log("Commit txn ID %" PRIu64 " failed: %s (errno=%d)\n", txn_id, strerror(errno), errno);
+    log("Commit txn ID %" PRIu64 " failed: %s (errno=%d)", txn_id, strerror(errno), errno);
     return CVMCACHE_STATUS_IOERR;
   }
   std::string fname = hdfs_file_name(txn.id_);
@@ -280,30 +280,30 @@ static int hdfs_commit_txn(uint64_t txn_id) {
 
   if ((-1 == hdfsRename(g_fs, new_fname.c_str(), fname.c_str())) &&  (-1 == hdfsExists(g_fs, fname.c_str())))
   {
-    log("Commit of txn ID %" PRIu64 ", filename %s failed: %s (errno=%d)\n", txn_id, fname.c_str(), strerror(errno), errno);
+    log("Commit of txn ID %" PRIu64 ", filename %s failed: %s (errno=%d)", txn_id, fname.c_str(), strerror(errno), errno);
     return CVMCACHE_STATUS_IOERR;
   }
 
-  log("Commit of txn ID %" PRIu64 ", filename %s was successful.\n", txn_id, fname.c_str());
+  log("Commit of txn ID %" PRIu64 ", filename %s was successful.", txn_id, fname.c_str());
   transactions.erase(txn_id);
   return CVMCACHE_STATUS_OK;
 }
 
 static int hdfs_abort_txn(uint64_t txn_id) {
-  log("Abort transaction %" PRIu64 "\n", txn_id);
+  log("Abort transaction %" PRIu64, txn_id);
 
   TxnTransient &txn = transactions[txn_id];
 
   if (-1 == hdfsCloseFile(g_fs, txn.fp_))
   {
-    log("Abort txn ID %" PRIu64 " failed: %s (errno=%d)\n", txn_id, strerror(errno), errno);
+    log("Abort txn ID %" PRIu64 " failed: %s (errno=%d)", txn_id, strerror(errno), errno);
     transactions.erase(txn_id);
     return CVMCACHE_STATUS_IOERR;
   }
   std::string fname = hdfs_file_name(txn.id_) + ".inprogress";
   if (-1 == hdfsDelete(g_fs, fname.c_str(), 0))
   {
-    log("Delete failed for %s: %s (errno=%d)\n", fname.c_str(), strerror(errno), errno);
+    log("Delete failed for %s: %s (errno=%d)", fname.c_str(), strerror(errno), errno);
     transactions.erase(txn_id);
     return CVMCACHE_STATUS_IOERR;
   }
@@ -333,26 +333,25 @@ int main(int argc, char **argv) {
   sigfillset(&sa.sa_mask);
   sigaction(SIGHUP, &sa, NULL);
 
-  time_t now = time(NULL);
-  log("Starting HDFS cache plugin at %s.\n", ctime(&now));
-  log("Will use HDFS directory %s\n", argv[1]);
+  log("Starting HDFS cache plugin.");
+  log("Will use HDFS directory %s", argv[1]);
   g_hdfs_base = argv[1];
 
   int euid = geteuid();
   if (euid == 0) {
-    log("Cowardly refusing to run the cache plugin as root.\n");
+    log("Cowardly refusing to run the cache plugin as root.");
     return 5;
   }
   struct passwd * user_info = getpwuid(euid);
   if ((user_info == nullptr) || (user_info->pw_name == nullptr))
   {
-    log("Failed to determine current username: %s (errno=%d).\n", strerror(errno), errno);
+    log("Failed to determine current username: %s (errno=%d).", strerror(errno), errno);
     return 2;
   }
   g_fs = hdfsConnectAsUser("default", 0, user_info->pw_name);
   if (g_fs == nullptr)
   {
-    log("Failed to connect to HDFS: %s (errno=%d).\n", strerror(errno), errno);
+    log("Failed to connect to HDFS: %s (errno=%d).", strerror(errno), errno);
     return 3;
   }
 
@@ -382,7 +381,7 @@ int main(int argc, char **argv) {
     hdfsDisconnect(g_fs);
     return 4;
   }
-  log("Listening for cvmfs clients on %s\n", argv[2]);
+  log("Listening for cvmfs clients on %s.", argv[2]);
   cvmcache_process_requests(ctx, 0);
   while (true) {
     sleep(1);
