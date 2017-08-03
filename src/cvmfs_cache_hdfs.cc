@@ -29,6 +29,43 @@ struct TxnTransient {
 
 std::map<uint64_t, TxnTransient> transactions;
 
+/**
+ * Allows us to use a cvmcache_hash in (hash) maps.
+ *
+ * From implementation in cvmfs/cache_plugin/cvmfs_cache_ram.cc
+ */
+struct ComparableHash {
+  ComparableHash() { }
+  ComparableHash(const struct cvmcache_hash &h) : hash(h) { }
+  bool operator ==(const ComparableHash &other) const {
+    return cvmcache_hash_cmp(const_cast<cvmcache_hash *>(&(this->hash)),
+                             const_cast<cvmcache_hash *>(&(other.hash))) == 0;
+  }
+  bool operator !=(const ComparableHash &other) const {
+    return cvmcache_hash_cmp(const_cast<cvmcache_hash *>(&(this->hash)),
+                             const_cast<cvmcache_hash *>(&(other.hash))) != 0;
+  }
+  bool operator <(const ComparableHash &other) const {
+    return cvmcache_hash_cmp(const_cast<cvmcache_hash *>(&(this->hash)),
+                             const_cast<cvmcache_hash *>(&(other.hash))) < 0;
+  }
+  bool operator >(const ComparableHash &other) const {
+    return cvmcache_hash_cmp(const_cast<cvmcache_hash *>(&(this->hash)),
+                             const_cast<cvmcache_hash *>(&(other.hash))) > 0;
+  }
+
+  struct cvmcache_hash hash;
+};
+
+struct FileHandle {
+  explicit FileHandle(hdfsFile fp, int64_t ref) :ref_(ref), fp_(fp) {}
+
+  int64_t ref_ = 0;
+  hdfsFile fp_ = nullptr;
+};
+
+std::map<ComparableHash, FileHandle> open_files;
+
 static std::string hdfs_file_name(const struct cvmcache_hash &id)
 {
   std::stringstream ss;
@@ -41,13 +78,51 @@ static std::string hdfs_file_name(const struct cvmcache_hash &id)
   return ss.str();
 }
 
+static int hdfs_chrefcnt(struct cvmcache_hash *id, int32_t change_by)
+{
+  if (change_by == 0)
+  {
+    return CVMCACHE_STATUS_OK;
+  }
+
+  auto iter = open_files.find(*id);
+  if (iter == open_files.end())
+  {
+    if (change_by < 0) {return CVMCACHE_STATUS_BADCOUNT;}
+
+    std::string fname = hdfs_file_name(*id);
+    hdfsFile fp = hdfsOpenFile(g_fs, fname.c_str(), O_RDONLY, 0, 0, 0);
+    if (fp == nullptr)
+    {
+      return CVMCACHE_STATUS_NOENTRY;
+    }
+    open_files.emplace(*id, FileHandle(fp, change_by));
+  }
+
+  auto &handle = iter->second ;
+  handle.ref_ += change_by;
+
+  if (handle.ref_ < 0)
+  {
+    hdfsCloseFile(g_fs, handle.fp_);
+    open_files.erase(iter);
+    return CVMCACHE_STATUS_BADCOUNT;
+  }
+  return CVMCACHE_STATUS_OK;
+}
+
 static int hdfs_pread(struct cvmcache_hash *id,
                     uint64_t offset,
                     uint32_t *size,
                     unsigned char *buffer)
 {
-  std::string fname = hdfs_file_name(*id);
-  hdfsFile fp = hdfsOpenFile(g_fs, fname.c_str(), O_RDONLY, 0, 0, 0);
+  auto iter = open_files.find(*id);
+  if (iter == open_files.end())
+  {
+    return CVMCACHE_STATUS_BADCOUNT;
+  }
+  hdfsFile fp = iter->second.fp_;
+
   if (fp == nullptr)
   {
     return CVMCACHE_STATUS_NOENTRY;
@@ -76,7 +151,7 @@ static int hdfs_start_txn(struct cvmcache_hash *id,
     hdfsCloseFile(g_fs, fp);
     return CVMCACHE_STATUS_OK;
   }
-  fp = hdfsOpenFile(g_fs, fname.c_str(), O_WRONLY, 0, 1, 0);
+  fp = hdfsOpenFile(g_fs, new_fname.c_str(), O_WRONLY, 0, 1, 0);
 
   TxnTransient txn(*id, fp);
   transactions[txn_id] = txn;
@@ -180,7 +255,7 @@ int main(int argc, char **argv) {
 
   struct cvmcache_callbacks callbacks;
   memset(&callbacks, 0, sizeof(callbacks));
-  callbacks.cvmcache_chrefcnt = nullptr;
+  callbacks.cvmcache_chrefcnt = hdfs_chrefcnt;
   callbacks.cvmcache_obj_info = nullptr;
   callbacks.cvmcache_pread = hdfs_pread;
   callbacks.cvmcache_start_txn = hdfs_start_txn;
