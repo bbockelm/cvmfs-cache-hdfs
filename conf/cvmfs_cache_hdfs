@@ -1,0 +1,10 @@
+#
+# HDFS caching plugin for CVMFS environment configuration
+#
+# This file is sourced by a shell before the HDFS caching plugin
+# is executed.  Use this to setup any environment variables custom to
+# your site.
+#
+# If you edit this file, it will not be overwritten on upgrade.
+#
+

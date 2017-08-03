@@ -21,8 +21,12 @@ for jar in ${HADOOP_HOME}/client/*.jar; do
 done
 CLASSPATH+="${HADOOP_CONF_DIR:-${HADOOP_HOME}/etc/hadoop}"
 
-
-#OSG change: needed to pick up xml defaults
+# Needed to pick up xml defaults
 export CLASSPATH="/etc/hadoop/conf:$CLASSPATH"
+
+# Source any local customization
+if [ -e @SYSCONF_INSTALL_DIR@/sysconfig/cvmfs_cache_hdfs ]; then
+  source @SYSCONF_INSTALL_DIR@/sysconfig/cvmfs_cache_hdfs
+fi
 
 exec @CMAKE_INSTALL_PREFIX@/libexec/cvmfs_cache_hdfs/cvmfs_cache_hdfs $@

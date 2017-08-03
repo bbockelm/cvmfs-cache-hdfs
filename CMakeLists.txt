@@ -21,6 +21,9 @@ SET( CMAKE_SHARED_LINKER_FLAGS "-Wl,--no-undefined")
 SET( CMAKE_MODULE_LINKER_FLAGS "-Wl,--no-undefined")
 SET( CMAKE_EXE_LINKER_FLAGS "-Wl,--no-undefined")
 
+set(SYSCONF_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/etc CACHE PATH
+    "Install directory for system-wide configuration files")
+
 add_definitions(-std=c++11)
 
 include_directories("${PROJECT_SOURCE_DIR}" "${CVMFS_CACHE_INCLUDES}" "${HDFS_INCLUDES}" "${JVM_INCLUDES}" "${JVM_MD_INCLUDES}")
@@ -41,4 +44,8 @@ install(
 install(
   PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/cvmfs_cache_hdfs_plugin
   DESTINATION libexec/cvmfs_cache_hdfs)
+
+install(
+  FILES conf/cvmfs_cache_hdfs
+  DESTINATION ${SYSCONF_INSTALL_DIR}/sysconfig/cvmfs_cache_hdfs)
 
