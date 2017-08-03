@@ -47,5 +47,5 @@ install(
 
 install(
   FILES conf/cvmfs_cache_hdfs
-  DESTINATION ${SYSCONF_INSTALL_DIR}/sysconfig/cvmfs_cache_hdfs)
+  DESTINATION ${SYSCONF_INSTALL_DIR}/sysconfig)
 
