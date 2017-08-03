@@ -31,7 +31,14 @@ target_link_libraries(cvmfs_cache_hdfs "${CVMFS_CACHE_LIB}" "${HDFS_LIB}")
 # These shared libraries are needed for libcvmfs_cache.a.  TODO: move this to macro file.
 target_link_libraries(cvmfs_cache_hdfs pthread "${OPENSSL_LIBRARIES}")
 
+# The plugin file requires a few customizations based on CMAKE_INSTALL_PREFIX.
+configure_file(src/cvmfs_cache_hdfs_plugin.in cvmfs_cache_hdfs_plugin @ONLY)
+
 install(
-  PROGRAMS cvmfs_cache_hdfs
-  DESTINATION bin)
+  TARGETS cvmfs_cache_hdfs
+  DESTINATION libexec/cvmfs_cache_hdfs)
+
+install(
+  PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/cvmfs_cache_hdfs_plugin
+  DESTINATION libexec/cvmfs_cache_hdfs)
 
