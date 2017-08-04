@@ -344,9 +344,14 @@ int main(int argc, char **argv) {
     struct passwd *cvmfs_user_info = getpwnam("cvmfs");
     if (cvmfs_user_info == nullptr)
       return 5;
-    setgid(cvmfs_user_info->pw_gid);
-    setuid(cvmfs_user_info->pw_uid);
-    seteuid(cvmfs_user_info->pw_uid);
+    if (-1 == setgid(cvmfs_user_info->pw_gid)) {
+       log("Failed to drop GID privileges: %s.", strerror(errno));
+       return 6;
+    }
+    if (-1 == setuid(cvmfs_user_info->pw_uid)) {
+       log("Failed to drop UID privileges: %s.", strerror(errno));
+       return 7;
+    }
     euid = cvmfs_user_info->pw_uid;
   }
   struct passwd * user_info = getpwuid(euid);

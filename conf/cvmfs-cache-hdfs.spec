@@ -12,6 +12,8 @@ Source0: %{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 BuildRequires: xrootd-server-devel >= 1:4.6
 BuildRequires: cmake
+BuildRequires: java7-devel
+BuildRequires: jpackage-utils
 BuildRequires: hadoop-libhdfs
 BuildRequires: openssl-devel
 
