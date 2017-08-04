@@ -287,6 +287,22 @@ static int hdfs_commit_txn(uint64_t txn_id) {
 
   log("Commit of txn ID %" PRIu64 ", filename %s was successful.", txn_id, fname.c_str());
   transactions.erase(txn_id);
+
+  auto iter = open_files.find(txn.id_);
+  if (iter == open_files.end())
+  {
+    hdfsFile fp = hdfsOpenFile(g_fs, fname.c_str(), O_RDONLY, 0, 0, 0);
+    if (fp == nullptr)
+    {
+      return CVMCACHE_STATUS_NOENTRY;
+    }
+    open_files.emplace(txn.id_, FileHandle(fp, 1));
+  } else {
+    // Race!  I think this can occur if multiple repos that contain the same data share
+    // a cache plugin.
+    iter->second.ref_ += 1;
+  }
+
   return CVMCACHE_STATUS_OK;
 }
 
@@ -397,7 +413,7 @@ int main(int argc, char **argv) {
   cvmcache_process_requests(ctx, 0);
 
   cvmcache_wait_for(ctx);
-  LogCvmfs(kLogCache, kLogDebug | kLogStdout, "  ... good bye");
+  log("  ... good bye");
   cvmcache_cleanup_global();
 
   hdfsDisconnect(g_fs);
