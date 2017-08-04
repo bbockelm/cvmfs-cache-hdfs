@@ -395,9 +395,11 @@ int main(int argc, char **argv) {
   }
   log("Listening for cvmfs clients on %s.", argv[2]);
   cvmcache_process_requests(ctx, 0);
-  while (true) {
-    sleep(1);
-  }
+
+  cvmcache_wait_for(ctx);
+  LogCvmfs(kLogCache, kLogDebug | kLogStdout, "  ... good bye");
+  cvmcache_cleanup_global();
+
   hdfsDisconnect(g_fs);
   return 0;
 }
