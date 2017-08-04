@@ -112,7 +112,7 @@ log(const char * format, ... ) {
   tp = localtime(&t);
   if (tp) {
     if (strftime(timestamp_buf, TIMESTAMP_BUF_SIZE, "%c", tp)) {
-      printf("[%s](pid:%d): ", timestamp_buf, getpid());
+      printf("[%s] (pid:%d): ", timestamp_buf, getpid());
     }
   }
   va_list args;
@@ -340,8 +340,14 @@ int main(int argc, char **argv) {
 
   int euid = geteuid();
   if (euid == 0) {
-    log("Cowardly refusing to run the cache plugin as root.");
-    return 5;
+    log("Cowardly refusing to run the cache plugin as root; will switch to user `cvmfs` if available.");
+    struct passwd *cvmfs_user_info = getpwnam("cvmfs");
+    if (cvmfs_user_info == nullptr)
+      return 5;
+    setgid(cvmfs_user_info->pw_gid);
+    setuid(cvmfs_user_info->pw_uid);
+    seteuid(cvmfs_user_info->pw_uid);
+    euid = cvmfs_user_info->pw_uid;
   }
   struct passwd * user_info = getpwuid(euid);
   if ((user_info == nullptr) || (user_info->pw_name == nullptr))
@@ -377,9 +383,6 @@ int main(int argc, char **argv) {
   ctx = cvmcache_init(&callbacks);
   assert(ctx != NULL);
 
-  //sleep(40);
-
-  //int part_size = cvmcache_max_object_size(ctx);
   int retval = cvmcache_listen(ctx, argv[2]);
   if (!retval) {
     hdfsDisconnect(g_fs);
