@@ -1,5 +1,5 @@
 Name: cvmfs-cache-hdfs
-Version: 1.2
+Version: 1.3
 Release: 1%{?dist}
 Summary: HDFS plugin for the CVMFS cache
 
@@ -48,6 +48,9 @@ rm -rf $RPM_BUILD_ROOT
 %config %{_sysconfdir}/cvmfs/domain.d/osgstorage.org.conf
 
 %changelog
+* Sat Aug 05 2017 Brian Bockelman <bbockelm@cse.unl.edu> - 1.3-1
+- Fix potential segfault after an IO error.
+
 * Fri Aug 04 2017 Brian Bockelman <bbockelm@cse.unl.edu> - 1.2-1
 - Fix reference counting semantics on transaction commit.
 
