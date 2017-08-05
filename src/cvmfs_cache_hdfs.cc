@@ -65,6 +65,7 @@ struct FileHandle {
 
   int64_t ref_ = 0;
   hdfsFile fp_ = nullptr;
+  off_t off_ = 0;
 };
 
 std::map<ComparableHash, FileHandle> open_files;
@@ -128,11 +129,13 @@ static std::string hdfs_file_name(const struct cvmcache_hash &id)
   char *human_hash = cvmcache_hash_print(const_cast<struct cvmcache_hash*>(&id));
   size_t length = strlen(human_hash);
   std::stringstream ss;
-  char *tmp_path = static_cast<char*>(malloc(length + 2));
+  char *tmp_path = static_cast<char*>(malloc(length + 3));
   memcpy(tmp_path, human_hash, 2);
   tmp_path[2] = '/';
-  memcpy(tmp_path+3, human_hash+2, length-2);
-  tmp_path[length+1] = '\0';
+  memcpy(tmp_path + 3, human_hash + 2, 2);
+  tmp_path[5] = '/';
+  memcpy(tmp_path+6, human_hash+4, length-4);
+  tmp_path[length+2] = '\0';
   ss << g_hdfs_base << "/" << tmp_path;
   free(tmp_path);
   free(human_hash);
@@ -180,13 +183,12 @@ static int hdfs_chrefcnt(struct cvmcache_hash *id, int32_t change_by)
   auto &handle = iter->second ;
   handle.ref_ += change_by;
 
-  if (handle.ref_ < 0)
+  if (handle.ref_ <= 0)
   {
     hdfsCloseFile(g_fs, handle.fp_);
     open_files.erase(iter);
-    return CVMCACHE_STATUS_BADCOUNT;
   }
-  return CVMCACHE_STATUS_OK;
+  return handle.ref_ < 0 ? CVMCACHE_STATUS_BADCOUNT : CVMCACHE_STATUS_OK;
 }
 
 static int hdfs_pread(struct cvmcache_hash *id,
@@ -205,10 +207,20 @@ static int hdfs_pread(struct cvmcache_hash *id,
   {
     return CVMCACHE_STATUS_NOENTRY;
   }
-  tSize nbytes = hdfsPread(g_fs, fp, offset, buffer, *size);
+  tSize nbytes;
+  if ((iter->second.off_ >= 0) && (offset == static_cast<uint64_t>(iter->second.off_))) {
+    // hdfsRead is understood to be more efficient as the Java client can do better
+    // pipelining of data.
+    nbytes = hdfsRead(g_fs, fp, buffer, *size);
+  } else {
+    iter->second.off_ = -1;
+    nbytes = hdfsPread(g_fs, fp, offset, buffer, *size);
+  }
+
   if (-1 == nbytes)
   {
     hdfsCloseFile(g_fs, fp);
+    open_files.erase(iter);
     return CVMCACHE_STATUS_IOERR;
   }
   *size = nbytes;
@@ -249,7 +261,6 @@ static int hdfs_write_txn(uint64_t txn_id,
 {
   TxnTransient &txn = transactions[txn_id];
 
-  log("Writing %" PRIu32 " bytes to txn ID %" PRIu64, size, txn_id);
   tSize nbytes = hdfsWrite(g_fs, txn.fp_, buffer, size);
   if (nbytes == -1)
   {
@@ -262,8 +273,11 @@ static int hdfs_write_txn(uint64_t txn_id,
 
 
 static int hdfs_commit_txn(uint64_t txn_id) {
-  TxnTransient &txn(transactions[txn_id]);
+  TxnTransient txn(transactions[txn_id]);
   log("commit txn ID %" PRIu64 ", size %" PRIu64, txn_id, txn.size_);
+
+  // In all cases (success or failure), we want the transaction erased.
+  transactions.erase(txn_id);
 
   if (hdfsHFlush(g_fs, txn.fp_) == -1)
   {
@@ -286,7 +300,6 @@ static int hdfs_commit_txn(uint64_t txn_id) {
   }
 
   log("Commit of txn ID %" PRIu64 ", filename %s was successful.", txn_id, fname.c_str());
-  transactions.erase(txn_id);
 
   auto iter = open_files.find(txn.id_);
   if (iter == open_files.end())
@@ -309,23 +322,20 @@ static int hdfs_commit_txn(uint64_t txn_id) {
 static int hdfs_abort_txn(uint64_t txn_id) {
   log("Abort transaction %" PRIu64, txn_id);
 
-  TxnTransient &txn = transactions[txn_id];
+  TxnTransient txn = transactions[txn_id];
 
   if (-1 == hdfsCloseFile(g_fs, txn.fp_))
   {
     log("Abort txn ID %" PRIu64 " failed: %s (errno=%d)", txn_id, strerror(errno), errno);
-    transactions.erase(txn_id);
     return CVMCACHE_STATUS_IOERR;
   }
   std::string fname = hdfs_file_name(txn.id_) + ".inprogress";
   if (-1 == hdfsDelete(g_fs, fname.c_str(), 0))
   {
     log("Delete failed for %s: %s (errno=%d)", fname.c_str(), strerror(errno), errno);
-    transactions.erase(txn_id);
     return CVMCACHE_STATUS_IOERR;
   }
 
-  transactions.erase(txn_id);
   return CVMCACHE_STATUS_OK;
 }
 
