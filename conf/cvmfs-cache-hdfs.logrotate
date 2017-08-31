@@ -8,6 +8,6 @@
     sharedscripts
     create 0644 cvmfs cvmfs
     postrotate
-        /usr/bin/killall -HUP --user cvmfs cvmfs_cache_hdfs
+        /usr/bin/killall -HUP --user cvmfs cvmfs-cache-hdfs
     endscript
 }

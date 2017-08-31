@@ -42,9 +42,9 @@ rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr(-,root,root,-)
-%{_libexecdir}/cvmfs_cache_hdfs/cvmfs_cache_hdfs_plugin
-%{_libexecdir}/cvmfs_cache_hdfs/cvmfs_cache_hdfs
-%config(noreplace) %{_sysconfdir}/sysconfig/cvmfs_cache_hdfs
+%{_libexecdir}/cvmfs-cache-hdfs/cvmfs-cache-hdfs-plugin
+%{_libexecdir}/cvmfs-cache-hdfs/cvmfs-cache-hdfs
+%config(noreplace) %{_sysconfdir}/sysconfig/cvmfs-cache-hdfs
 %config %{_sysconfdir}/cvmfs/domain.d/osgstorage.org.conf
 %config(noreplace) %{_sysconfdir}/cvmfs/cvmfs-cache-hdfs.conf
 %config(noreplace) %{_sysconfdir}/logrotate.d/cvmfs-cache-hdfs
