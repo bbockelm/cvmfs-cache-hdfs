@@ -13,6 +13,7 @@
 #include <pwd.h>
 #include <stdarg.h>
 #include <signal.h>
+#include <sys/stat.h>
 
 #include "libcvmfs_cache.h"
 #include "hdfs.h"
@@ -89,6 +90,21 @@ reload_log() {
     log("Failed to open new log file descriptor: %s.", strerror(errno));
     return;
   }
+
+  // On the first logfile open, CVMFS may have started as user root.  If
+  // we can, set the ownership and permissions on the logfile.
+  if (geteuid() == 0) {
+    struct passwd *cvmfs_user_info = getpwnam("cvmfs");
+    if (cvmfs_user_info) {
+      if (-1 == fchown(g_logfd, cvmfs_user_info->pw_uid, cvmfs_user_info->pw_gid)) {
+        log("Failed to set the correct ownership for the logfile: %s (errno=%d).", strerror(errno), errno);
+      }
+      if (-1 == fchmod(g_logfd, 0644)) {
+        log("Failed to set the correct mode for the logfile: %s (errno=%d).", strerror(errno), errno);
+      }
+    }
+  }
+
   close(g_logfd);
   g_logfd = fd;
   dup2(g_logfd, 1);
@@ -339,21 +355,43 @@ static int hdfs_abort_txn(uint64_t txn_id) {
   return CVMCACHE_STATUS_OK;
 }
 
-void Usage(const char *progname) {
-  printf("%s <HDFS base directory> <Cvmfs cache locator>\n", progname);
+static void
+configure_logging(cvmcache_option_map* options) {
+
+  char *logfname = cvmcache_options_get(options, "LOGFILE");
+  g_logfname = logfname ? logfname : "/dev/null";
+
+  int fd = open("/dev/zero", O_RDONLY);
+  dup2(fd, 0);
+  reload_log();
 }
 
 
 int main(int argc, char **argv) {
-  if (argc < 3) {
-    Usage(argv[0]);
-    return 1;
+
+  // Note: we simply leak this object on error.
+  cvmcache_option_map *options = cvmcache_options_init();
+  const char *config_fname = (argc > 1) ? argv[1] : "/etc/cvmfs/cvmfs-cache-hdfs.conf";
+
+  if (cvmcache_options_parse(options, config_fname) != 0) {
+    printf("Cannot parse options file: %s\n", config_fname);
+    return 8;
+  }
+  configure_logging(options);
+
+  for (int idx=1; idx<argc; idx++) {
+    char *offset = strchr(argv[idx], '=');
+    if (offset == NULL) {
+      printf("Cannot parse command line option %s\n", argv[idx]);
+      return 11;
+    }
+    std::string name(argv[idx], offset - argv[idx]);
+    std::string val(offset + 1);
+    cvmcache_options_set(options, name.c_str(), val.c_str());
+    log("Overriding log config file with command line: %s=%s", name.c_str(), val.c_str());
   }
 
-  int fd = open("/dev/zero", O_RDONLY);
-  dup2(fd, 0);
-  g_logfname = (argc > 3) ? argv[3] : "/dev/null";
-  reload_log();
+  configure_logging(options);
   struct sigaction sa;
   sa.sa_handler = &sighup_handler;
   sa.sa_flags = SA_RESTART;
@@ -361,8 +399,34 @@ int main(int argc, char **argv) {
   sigaction(SIGHUP, &sa, NULL);
 
   log("Starting HDFS cache plugin.");
-  log("Will use HDFS directory %s", argv[1]);
-  g_hdfs_base = argv[1];
+
+  char *locator_raw = cvmcache_options_get(options, "PLUGIN_LOCATOR");
+  if (locator_raw == NULL) {
+    log("PLUGIN_LOCATOR not specified in config file %s.\n", config_fname);
+    return 9;
+  }
+  std::string locator = locator_raw;
+  cvmcache_options_free(locator_raw);
+
+  char *test_mode = cvmcache_options_get(options, "PLUGIN_TEST");
+  if (!test_mode) {
+    cvmcache_spawn_watchdog(NULL);
+  }
+  cvmcache_options_free(test_mode);
+
+  if (argc > 2) {
+    g_hdfs_base = argv[2];
+  } else {
+    char *hdfs_base = cvmcache_options_get(options, "HDFS_BASE_DIR");
+    if (hdfs_base == nullptr) {
+      log("HDFS_BASE_DIR not specified in config file %s.\n", config_fname);
+      return 10;
+    }
+    g_hdfs_base = hdfs_base;
+    cvmcache_options_free(hdfs_base);
+  }
+
+  log("Will use HDFS directory %s", g_hdfs_base.c_str());
 
   int euid = geteuid();
   if (euid == 0) {
@@ -414,12 +478,12 @@ int main(int argc, char **argv) {
   ctx = cvmcache_init(&callbacks);
   assert(ctx != NULL);
 
-  int retval = cvmcache_listen(ctx, argv[2]);
+  int retval = cvmcache_listen(ctx, const_cast<char *>(locator.c_str()));
   if (!retval) {
     hdfsDisconnect(g_fs);
     return 4;
   }
-  log("Listening for cvmfs clients on %s.", argv[2]);
+  log("Listening for cvmfs clients on %s.", locator.c_str());
   cvmcache_process_requests(ctx, 0);
 
   cvmcache_wait_for(ctx);

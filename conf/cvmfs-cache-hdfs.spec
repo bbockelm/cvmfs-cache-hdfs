@@ -46,6 +46,8 @@ rm -rf $RPM_BUILD_ROOT
 %{_libexecdir}/cvmfs_cache_hdfs/cvmfs_cache_hdfs
 %config(noreplace) %{_sysconfdir}/sysconfig/cvmfs_cache_hdfs
 %config %{_sysconfdir}/cvmfs/domain.d/osgstorage.org.conf
+%config(noreplace) %{_sysconfdir}/cvmfs/cvmfs-cache-hdfs.conf
+%config(noreplace) %{_sysconfdir}/logrotate.d/cvmfs-cache-hdfs
 
 %changelog
 * Sat Aug 05 2017 Brian Bockelman <bbockelm@cse.unl.edu> - 1.3-1
