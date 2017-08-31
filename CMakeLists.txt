@@ -32,7 +32,7 @@ add_executable(cvmfs-cache-hdfs src/cvmfs_cache_hdfs.cc)
 target_link_libraries(cvmfs-cache-hdfs "${CVMFS_CACHE_LIB}" "${HDFS_LIB}")
 
 # These shared libraries are needed for libcvmfs_cache.a.  TODO: move this to macro file.
-target_link_libraries(cvmfs-cache_hdfs pthread "${OPENSSL_LIBRARIES}")
+target_link_libraries(cvmfs-cache-hdfs pthread "${OPENSSL_LIBRARIES}")
 
 # The plugin file requires a few customizations based on CMAKE_INSTALL_PREFIX.
 configure_file(src/cvmfs_cache_hdfs_plugin.in cvmfs-cache-hdfs-plugin @ONLY)

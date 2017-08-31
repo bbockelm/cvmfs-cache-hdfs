@@ -1,5 +1,5 @@
 Name: cvmfs-cache-hdfs
-Version: 1.3
+Version: 2.0
 Release: 1%{?dist}
 Summary: HDFS plugin for the CVMFS cache
 
@@ -50,6 +50,10 @@ rm -rf $RPM_BUILD_ROOT
 %config(noreplace) %{_sysconfdir}/logrotate.d/cvmfs-cache-hdfs
 
 %changelog
+* Thu Aug 31 2017 Brian Bockelman <bbockelm@cse.unl.edu> - 2.0-1
+- Rename all binaries.
+- Adopt new naming scheme.
+
 * Sat Aug 05 2017 Brian Bockelman <bbockelm@cse.unl.edu> - 1.3-1
 - Fix potential segfault after an IO error.
 
