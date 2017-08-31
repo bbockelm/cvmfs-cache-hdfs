@@ -10,12 +10,12 @@ URL: https://github.com/bbockelm/cvmfs-cache-hdfs
 # git archive --format=tgz --prefix=%{name}-%{version}/ v%{version} > %{name}-%{version}.tar.gz
 Source0: %{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
-BuildRequires: xrootd-server-devel >= 1:4.6
 BuildRequires: cmake
 BuildRequires: java7-devel
 BuildRequires: jpackage-utils
 BuildRequires: hadoop-libhdfs
 BuildRequires: openssl-devel
+BuildRequires: gcc-c++
 
 # 2.3.99 was a HCC-specific version with the external cache plugin API.
 BuildRequires: cvmfs-devel >= 2.3.99

@@ -20,7 +20,9 @@
 
 static struct cvmcache_context *ctx;
 static std::string g_hdfs_base;
-static hdfsFS g_fs = nullptr;
+// Fun fact: libhdfs will consistently crash deep inside the JVM if g_fs is declared static.
+// This occurs reliably and I have no idea why.
+hdfsFS g_fs = nullptr;
 static int g_replicas = 1;
 
 struct TxnTransient {
@@ -92,25 +94,26 @@ reload_log() {
     return;
   }
 
+  close(g_logfd);
+  g_logfd = fd;
+  dup2(g_logfd, 1);
+  dup2(g_logfd, 2);
+  log("Logfile successfully reloaded.");
+
   // On the first logfile open, CVMFS may have started as user root.  If
   // we can, set the ownership and permissions on the logfile.
   if (geteuid() == 0) {
     struct passwd *cvmfs_user_info = getpwnam("cvmfs");
     if (cvmfs_user_info) {
       if (-1 == fchown(g_logfd, cvmfs_user_info->pw_uid, cvmfs_user_info->pw_gid)) {
-        log("Failed to set the correct ownership for the logfile: %s (errno=%d).", strerror(errno), errno);
+        log("Failed to set the correct ownership for the logfile (%s): %s (errno=%d).", g_logfname.c_str(), strerror(errno), errno);
       }
       if (-1 == fchmod(g_logfd, 0644)) {
-        log("Failed to set the correct mode for the logfile: %s (errno=%d).", strerror(errno), errno);
+        log("Failed to set the correct mode for the logfile (%s): %s (errno=%d).", g_logfname.c_str(), strerror(errno), errno);
       }
     }
   }
 
-  close(g_logfd);
-  g_logfd = fd;
-  dup2(g_logfd, 1);
-  dup2(g_logfd, 2);
-  log("Logfile successfully reloaded.");
 }
 
 static void
@@ -164,7 +167,6 @@ static int hdfs_obj_info(struct cvmcache_hash *id, struct cvmcache_object_info *
   std::string fname = hdfs_file_name(*id);
   log("Getting object info for %s.", fname.c_str());
 
-
   hdfsFileInfo * hinfo = hdfsGetPathInfo(g_fs, fname.c_str());
   if (hinfo == nullptr)
   {
@@ -172,6 +174,7 @@ static int hdfs_obj_info(struct cvmcache_hash *id, struct cvmcache_object_info *
   }
   info->size = hinfo->mSize;
   hdfsFreeFileInfo(hinfo, 1);
+
   return CVMCACHE_STATUS_OK;
 }
 
@@ -189,7 +192,7 @@ static int hdfs_chrefcnt(struct cvmcache_hash *id, int32_t change_by)
   {
     if (change_by < 0) {return CVMCACHE_STATUS_BADCOUNT;}
 
-    hdfsFile fp = hdfsOpenFile(g_fs, fname.c_str(), O_RDONLY, 0, g_replicas, 0);
+    hdfsFile fp = hdfsOpenFile(g_fs, fname.c_str(), O_RDONLY, 0, 0, 0);
     if (fp == nullptr)
     {
       return CVMCACHE_STATUS_NOENTRY;
@@ -197,7 +200,7 @@ static int hdfs_chrefcnt(struct cvmcache_hash *id, int32_t change_by)
     open_files.emplace(*id, FileHandle(fp, change_by));
   }
 
-  auto &handle = iter->second ;
+  auto &handle = iter->second;
   handle.ref_ += change_by;
 
   if (handle.ref_ <= 0)
@@ -264,7 +267,7 @@ static int hdfs_start_txn(struct cvmcache_hash *id,
     hdfsCloseFile(g_fs, fp);
     return CVMCACHE_STATUS_OK;
   }
-  fp = hdfsOpenFile(g_fs, new_fname.c_str(), O_WRONLY, 0, 1, 0);
+  fp = hdfsOpenFile(g_fs, new_fname.c_str(), O_WRONLY, 0, g_replicas, 0);
   if (fp == nullptr)
   {
     log("Failed to open a new cache file (%s) for writing.", new_fname.c_str());
@@ -384,16 +387,18 @@ int main(int argc, char **argv) {
     return 8;
   }
 
-  for (int idx=1; idx<argc; idx++) {
-    char *offset = strchr(argv[idx], '=');
-    if (offset == NULL) {
-      printf("Cannot parse command line option %s\n", argv[idx]);
-      return 11;
+  if (argc > 2) {
+    for (int idx=2; idx<argc; idx++) {
+      char *offset = strchr(argv[idx], '=');
+      if (offset == NULL) {
+        printf("Cannot parse command line option %s\n", argv[idx]);
+        return 11;
+      }
+      std::string name(argv[idx], offset - argv[idx]);
+      std::string val(offset + 1);
+      cvmcache_options_set(options, name.c_str(), val.c_str());
+      log("Overriding log config file with command line: %s=%s", name.c_str(), val.c_str());
     }
-    std::string name(argv[idx], offset - argv[idx]);
-    std::string val(offset + 1);
-    cvmcache_options_set(options, name.c_str(), val.c_str());
-    log("Overriding log config file with command line: %s=%s", name.c_str(), val.c_str());
   }
 
   configure_logging(options);
