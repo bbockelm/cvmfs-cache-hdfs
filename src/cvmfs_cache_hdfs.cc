@@ -18,9 +18,10 @@
 #include "libcvmfs_cache.h"
 #include "hdfs.h"
 
-struct cvmcache_context *ctx;
-std::string g_hdfs_base;
-hdfsFS g_fs = nullptr;
+static struct cvmcache_context *ctx;
+static std::string g_hdfs_base;
+static hdfsFS g_fs = nullptr;
+static int g_replicas = 1;
 
 struct TxnTransient {
   TxnTransient() : size_(0), fp_(NULL) { memset(&id_, 0, sizeof(id_)); }
@@ -188,7 +189,7 @@ static int hdfs_chrefcnt(struct cvmcache_hash *id, int32_t change_by)
   {
     if (change_by < 0) {return CVMCACHE_STATUS_BADCOUNT;}
 
-    hdfsFile fp = hdfsOpenFile(g_fs, fname.c_str(), O_RDONLY, 0, 0, 0);
+    hdfsFile fp = hdfsOpenFile(g_fs, fname.c_str(), O_RDONLY, 0, g_replicas, 0);
     if (fp == nullptr)
     {
       return CVMCACHE_STATUS_NOENTRY;
@@ -236,6 +237,11 @@ static int hdfs_pread(struct cvmcache_hash *id,
   if (-1 == nbytes)
   {
     hdfsCloseFile(g_fs, fp);
+
+    // On IO error, drop the file from the cache.
+    std::string fname = hdfs_file_name(*id);
+    hdfsDelete(g_fs, fname.c_str(), 0);
+
     open_files.erase(iter);
     return CVMCACHE_STATUS_IOERR;
   }
@@ -377,7 +383,6 @@ int main(int argc, char **argv) {
     printf("Cannot parse options file: %s\n", config_fname);
     return 8;
   }
-  configure_logging(options);
 
   for (int idx=1; idx<argc; idx++) {
     char *offset = strchr(argv[idx], '=');
@@ -414,19 +419,25 @@ int main(int argc, char **argv) {
   }
   cvmcache_options_free(test_mode);
 
-  if (argc > 2) {
-    g_hdfs_base = argv[2];
-  } else {
-    char *hdfs_base = cvmcache_options_get(options, "HDFS_BASE_DIR");
-    if (hdfs_base == nullptr) {
-      log("HDFS_BASE_DIR not specified in config file %s.\n", config_fname);
-      return 10;
-    }
-    g_hdfs_base = hdfs_base;
-    cvmcache_options_free(hdfs_base);
+  char *hdfs_base = cvmcache_options_get(options, "HDFS_BASE_DIR");
+  if (hdfs_base == nullptr) {
+    log("HDFS_BASE_DIR not specified in config file %s.\n", config_fname);
+    return 10;
   }
+  g_hdfs_base = hdfs_base;
+  cvmcache_options_free(hdfs_base);
 
   log("Will use HDFS directory %s", g_hdfs_base.c_str());
+
+  char *replicas_raw = cvmcache_options_get(options, "HDFS_REPLICAS");
+  if (replicas_raw) {
+    g_replicas = strtol(replicas_raw, NULL, 10);
+  }
+  if (g_replicas) {
+    log("Setting block replica count to %d", g_replicas);
+  } else {
+    log("Setting block replica count to HDFS client default.");
+  }
 
   int euid = geteuid();
   if (euid == 0) {
