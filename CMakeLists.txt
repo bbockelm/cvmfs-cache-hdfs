@@ -39,15 +39,15 @@ configure_file(src/cvmfs_cache_hdfs_plugin.in cvmfs-cache-hdfs-plugin @ONLY)
 
 install(
   TARGETS cvmfs-cache-hdfs
-  DESTINATION libexec/cvmfs-cache-hdfs)
+  DESTINATION libexec/cvmfs-cache-hdfs/)
 
 install(
   PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/cvmfs-cache-hdfs-plugin
-  DESTINATION libexec/cvmfs-cache-hdfs)
+  DESTINATION libexec/cvmfs-cache-hdfs/)
 
 install(
   FILES conf/cvmfs-cache-hdfs
-  DESTINATION ${SYSCONF_INSTALL_DIR}/sysconfig)
+  DESTINATION ${SYSCONF_INSTALL_DIR}/sysconfig/)
 
 install(
   FILES conf/osgstorage.org.conf
@@ -56,4 +56,9 @@ install(
 install(
   FILES conf/cvmfs-cache-hdfs.conf
   DESTINATION ${SYSCONF_INSTALL_DIR}/cvmfs/)
+
+install(
+  FILES conf/cvmfs-cache-hdfs.logrotate
+  DESTINATION ${SYSCONF_INSTALL_DIR}/logrotate.d
+  RENAME cvmfs-cache-hdfs)
 
