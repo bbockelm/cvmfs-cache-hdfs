@@ -54,6 +54,10 @@ install(
   DESTINATION ${SYSCONF_INSTALL_DIR}/cvmfs/domain.d/)
 
 install(
+  FILES conf/cms.osgstorage.org.conf conf/ligo.osgstorage.org.conf
+  DESTINATION ${SYSCONF_INSTALL_DIR}/cvmfs/config.d/)
+
+install(
   FILES conf/cvmfs-cache-hdfs.conf
   DESTINATION ${SYSCONF_INSTALL_DIR}/cvmfs/)
 
