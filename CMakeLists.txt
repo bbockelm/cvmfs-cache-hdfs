@@ -28,32 +28,41 @@ add_definitions(-std=c++11)
 
 include_directories("${PROJECT_SOURCE_DIR}" "${CVMFS_CACHE_INCLUDES}" "${HDFS_INCLUDES}" "${JVM_INCLUDES}" "${JVM_MD_INCLUDES}")
 
-add_executable(cvmfs_cache_hdfs src/cvmfs_cache_hdfs.cc)
-target_link_libraries(cvmfs_cache_hdfs "${CVMFS_CACHE_LIB}" "${HDFS_LIB}")
+add_executable(cvmfs-cache-hdfs src/cvmfs_cache_hdfs.cc)
+target_link_libraries(cvmfs-cache-hdfs "${CVMFS_CACHE_LIB}" "${HDFS_LIB}")
 
 # These shared libraries are needed for libcvmfs_cache.a.  TODO: move this to macro file.
-target_link_libraries(cvmfs_cache_hdfs pthread "${OPENSSL_LIBRARIES}")
+target_link_libraries(cvmfs-cache-hdfs pthread "${OPENSSL_LIBRARIES}")
 
 # The plugin file requires a few customizations based on CMAKE_INSTALL_PREFIX.
-configure_file(src/cvmfs_cache_hdfs_plugin.in cvmfs_cache_hdfs_plugin @ONLY)
+configure_file(src/cvmfs_cache_hdfs_plugin.in cvmfs-cache-hdfs-plugin @ONLY)
 
 install(
-  TARGETS cvmfs_cache_hdfs
-  DESTINATION libexec/cvmfs_cache_hdfs)
+  TARGETS cvmfs-cache-hdfs
+  DESTINATION libexec/cvmfs-cache-hdfs/)
 
 install(
-  PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/cvmfs_cache_hdfs_plugin
-  DESTINATION libexec/cvmfs_cache_hdfs)
+  PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/cvmfs-cache-hdfs-plugin
+  DESTINATION libexec/cvmfs-cache-hdfs/)
 
 install(
-  FILES conf/cvmfs_cache_hdfs
-  DESTINATION ${SYSCONF_INSTALL_DIR}/sysconfig)
+  FILES conf/cvmfs-cache-hdfs
+  DESTINATION ${SYSCONF_INSTALL_DIR}/sysconfig/)
 
 install(
   FILES conf/osgstorage.org.conf
   DESTINATION ${SYSCONF_INSTALL_DIR}/cvmfs/domain.d/)
 
 install(
+  FILES conf/cms.osgstorage.org.conf conf/ligo.osgstorage.org.conf
+  DESTINATION ${SYSCONF_INSTALL_DIR}/cvmfs/config.d/)
+
+install(
   FILES conf/cvmfs-cache-hdfs.conf
   DESTINATION ${SYSCONF_INSTALL_DIR}/cvmfs/)
+
+install(
+  FILES conf/cvmfs-cache-hdfs.logrotate
+  DESTINATION ${SYSCONF_INSTALL_DIR}/logrotate.d
+  RENAME cvmfs-cache-hdfs)
 

@@ -12,8 +12,8 @@ CVMFS_CACHE_posix_SHARED=yes
 CVMFS_CACHE_tiered_LOWER=hdfs
 CVMFS_CACHE_hdfs_TYPE=external
 # Multiple arguments must be comma-separated.
-CVMFS_CACHE_hdfs_CMDLINE=/usr/libexec/cvmfs_cache_hdfs/cvmfs_cache_hdfs_plugin,/etc/cvmfs/cvmfs-cache-hdfs.conf
-CVMFS_CACHE_hdfs_LOCATOR=unix=/var/run/cvmfs/cvmfs_cache_hdfs.socket
+CVMFS_CACHE_hdfs_CMDLINE=/usr/libexec/cvmfs-cache-hdfs/cvmfs-cache_hdfs_plugin,/etc/cvmfs/cvmfs-cache-hdfs.conf
+CVMFS_CACHE_hdfs_LOCATOR=unix=/var/run/cvmfs/cvmfs-cache_hdfs.socket
 ```
 
 A few notes about the command-line arguments for the HDFS plugin:
