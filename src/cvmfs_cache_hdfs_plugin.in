@@ -24,6 +24,8 @@ CLASSPATH+="${HADOOP_CONF_DIR:-${HADOOP_HOME}/etc/hadoop}"
 # Needed to pick up xml defaults
 export CLASSPATH="/etc/hadoop/conf:$CLASSPATH"
 
+export LIBHDFS_OPTS="-Xmx128m -Xss1280k"
+
 # Source any local customization
 if [ -e @SYSCONF_INSTALL_DIR@/sysconfig/cvmfs-cache-hdfs ]; then
   source @SYSCONF_INSTALL_DIR@/sysconfig/cvmfs-cache-hdfs
